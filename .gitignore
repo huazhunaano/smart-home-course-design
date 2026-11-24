@@ -1,0 +1,43 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+htmlcov/
+
+# 密钥与本地配置
+.env
+.env.*
+secrets/
+*.pem
+*.key
+*.p12
+
+# 数据库与本地数据
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 临时文件与锁文件
+~$*
+*.tmp
+*.log
+.screenshots/
+
+# 课程资料（非本组交付物）
+2026智能家居系统-课程设计指导书-学生用.docx
