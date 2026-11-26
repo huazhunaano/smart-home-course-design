@@ -6,7 +6,7 @@
 
 | 成员 | 角色 | 主责模块 | 工作量 |
 |---|---|---|---|
-| 华祖鼎（组长） | 架构 + 展示层 | 五层架构与依赖规则、接口契约、Home3D 平面图、2D/3D 切换、集成与发布 | 35% |
+| 华祖鼎（组长） | 架构 + 展示层 | 五层架构与依赖规则、接口契约、SVG 平面图与设备图层、集成与发布 | 35% |
 | 陈逸轩 | 后端 + 设备控制 + 数据层 | REST/WS 服务、控制层校验与重试、设备能力模型与模拟器、Repository 与 SQLite | 33% |
 | 周灿 | 策略 + 文档测试 | 场景规则、温控策略、测试用例与报告、四份交付文档 | 32% |
 
@@ -22,13 +22,14 @@
 │  ├─ 03-需求规格说明书v1.0.docx
 │  ├─ 04-架构设计与评审讲解稿.docx
 │  └─ figures/             # 架构图、用例图、类图、状态图、时序图、线框图
-├─ web/                    # 前端（React 19 + Vite + Home3D），待建
-├─ server/                 # 后端（FastAPI），待建
-├─ shared/contracts/       # 接口契约（JSON Schema / TS 类型），待建
+├─ web/                    # 前端（React 19 + TypeScript + Vite + 自研 SVG）
+├─ server/                 # 后端（FastAPI + SQLite + WebSocket）
+│  ├─ app/                 # 展示/策略/控制/设备/数据五层实现
+│  └─ tests/               # pytest 单元与接口测试
 └─ README.md
 ```
 
-代码尚未开始，当前仓库先承载第 9–10 周交付物；后续按 `web/`、`server/`、`shared/contracts/` 分层落地。
+第 12–13 周迭代已完成：数据层、设备层、控制层、平面图与设备面板、状态同步；第 14 周起补场景策略与选做功能。
 
 ## 分支模型
 
@@ -61,10 +62,10 @@
 
 ## 技术路线（已定稿）
 
-- 前端：React 19 + TypeScript + Vite，改造 Home3D 复用 2D/3D 平面图能力
+- 前端：React 19 + TypeScript + Vite，自研 SVG 2D 平面图（3D 作为后续扩展）
 - 后端：Python 3.14 + FastAPI + Uvicorn，原生 WebSocket 推送
 - 数据：SQLite（WAL 模式）+ Repository 接口，零安装、事务完整
-- 设备：统一驱动接口 + HTTP 设备模拟器，后续可替换为真实驱动
+- 设备：统一驱动接口 + 内置模拟器（19 类、40 台），后续可替换为真实驱动
 - 部署：本机双进程启动脚本，不使用 Docker
 
 ## 关键接口（契约冻结后以 `shared/contracts/` 为准）
@@ -81,18 +82,32 @@
 - [可行性分析报告](docs/02-可行性分析报告.docx)
 - [需求规格说明书 v1.0](docs/03-需求规格说明书v1.0.docx)
 - [架构设计与评审讲解稿](docs/04-架构设计与评审讲解稿.docx)
+- [概要设计说明书](docs/05-概要设计说明书.docx)
+- [测试报告](docs/06-测试报告.docx)
 - 配图目录：[docs/figures](docs/figures)
 
 ## 启动方式
 
-代码落地后在此补充：
+```bash
+# 1) 后端（首次先安装依赖）
+cd server
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# 2) 前端（开发模式，另开终端）
+cd web
+npm install
+npm run dev            # http://localhost:5173
+
+# 或构建后由后端直接托管
+npm run build          # 生成 web/dist，随后访问 http://127.0.0.1:8000
+```
+
+## 测试
 
 ```bash
-# 后端
-python -m venv .venv && .venv\Scripts\activate
-pip install -r server/requirements.txt
-uvicorn server.main:app --reload
-
-# 前端
-cd web && npm install && npm run dev
+cd server
+python -m pytest -q    # 16 个用例：策略、控制、仓储、REST
 ```
+
+最近一次结果：`16 passed`。回家场景 23 条命令全部成功，总耗时约 715 ms，单条平均 30.4 ms。
