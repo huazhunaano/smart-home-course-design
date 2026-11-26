@@ -388,3 +388,74 @@ button { cursor: pointer; }
   .appbar { padding: 0 12px; }
   .scene-row { padding: 8px 12px; }
 }
+
+/* ---------- 3D 视图 ---------- */
+.scene3d {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #f6f6f6;
+}
+
+.scene3d-host { position: absolute; inset: 0; }
+.scene3d-host canvas { display: block; width: 100%; height: 100%; }
+
+.scene3d-hud {
+  position: absolute; left: 12px; top: 12px;
+  max-width: 260px; padding: 10px 12px;
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid var(--line); border-radius: 8px;
+}
+
+.scene3d-title { display: flex; align-items: center; gap: 8px; }
+.scene3d-title b { font-size: 14px; }
+
+.scene3d-state {
+  font-size: 10px; color: var(--sub);
+  border: 1px solid #ccc; border-radius: 999px; padding: 1px 7px;
+}
+.scene3d-state.on { background: #111; border-color: #111; color: #fff; }
+
+.scene3d-room { margin: 4px 0 0; font-size: 11px; color: var(--sub); }
+
+.scene3d-kv { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 11px; }
+.scene3d-kv div { display: flex; justify-content: space-between; gap: 6px; padding: 2px 0; border-bottom: 1px dashed #eee; }
+.scene3d-kv span { color: var(--sub); }
+
+.scene3d-tip { margin: 8px 0 0; font-size: 10px; color: #999; }
+
+.scene3d-actions {
+  position: absolute; right: 12px; top: 12px;
+  display: flex; gap: 4px; padding: 3px;
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid var(--line); border-radius: 8px;
+}
+
+.scene3d-legend {
+  position: absolute; left: 12px; bottom: 12px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 5px 10px; font-size: 11px; color: var(--sub);
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid var(--line); border-radius: 8px;
+}
+
+.scene3d-legend .dot {
+  display: inline-block; width: 9px; height: 9px; margin-right: 4px;
+  border: 1px solid #666; border-radius: 50%; background: #fff;
+}
+.scene3d-legend .dot.on { background: #111; border-color: #111; }
+
+.scene3d-legend .halo {
+  display: inline-block; width: 9px; height: 9px; margin-right: 4px;
+  border: 2px solid #111; border-radius: 50%;
+}
+
+.scene3d-fallback { padding: 24px; font-size: 12px; color: var(--sub); }
+
+.scene3d-loading { display: grid; place-items: center; font-size: 12px; color: var(--sub); }
+
+.icon-btn.strong { background: #111; border-color: #111; color: #fff; }
+.icon-btn.strong:hover { background: #000; border-color: #000; }

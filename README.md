@@ -62,11 +62,13 @@
 
 ## 技术路线（已定稿）
 
-- 前端：React 19 + TypeScript + Vite，自研 SVG 2D 平面图（3D 作为后续扩展）
+- 前端：React 19 + TypeScript + Vite，自研 SVG 2D 平面图 + Three.js 3D 局部视图（按需加载，无 WebGL 时回退 2D）
 - 后端：Python 3.14 + FastAPI + Uvicorn，原生 WebSocket 推送
 - 数据：SQLite（WAL 模式）+ Repository 接口，零安装、事务完整
 - 设备：统一驱动接口 + 内置模拟器（19 类、40 台），后续可替换为真实驱动
 - 部署：本机双进程启动脚本，不使用 Docker
+
+平面图交互：选中任一设备后，点击平面图标题栏的“3D 视图”，进入该设备附近的 Three.js 立体场景；拖动旋转、滚轮缩放、右键平移，按 Esc 或“退出 3D”返回平面图。2D 与 3D 共用同一份房间、家具与设备数据，状态经 WebSocket 同步。
 
 ## 设计参考
 
@@ -78,8 +80,11 @@
 | [Gladys Assistant](https://gladysassistant.com/) | 可分区 Dashboard、设备磁贴 + 详情弹层、主色克制的浅色界面 |
 | [openHAB Main UI](https://www.openhab.org/docs/ui/) | 位置 / 设备 / 属性三层语义模型，据此组织“房间 → 设备 → 能力”的展示结构 |
 | [ha-floorplan](https://github.com/ExperienceLovelace/ha-floorplan) | SVG 平面图与设备状态联动的实现方式 |
+| [Home3D / Home_View](https://github.com/lohith9/Home_View) | 指导书第 4 章介绍的“同一份设计数据、2D 与 3D 两个投影”思路；按其 4.3 路线 C 自建 UI，未复用其代码 |
 
-落地到本项目：左侧房间导航（位置）、中间 SVG 平面图与设备圆点（设备）、右侧面板按设备类型生成控制项（属性）；开启设备用实心圆点 + 高亮描边，关闭为空心，悬停显示名称与状态。
+落地到本项目：左侧房间导航（位置）、中间 SVG 平面图与设备圆点（设备）、右侧面板按设备类型生成控制项（属性）；开启设备用实心圆点 + 高亮描边，关闭为空心，悬停显示名称与状态。选中设备后可进入 3D 局部视图，墙体按多边形拉伸、家具用体块、设备用球形标记并跟随开关状态变色。
+
+第三方许可：3D 视图使用 [three.js](https://threejs.org/)（MIT License）。
 
 ## 关键接口（契约冻结后以 `shared/contracts/` 为准）
 

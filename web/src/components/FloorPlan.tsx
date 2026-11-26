@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import type { Device, Furniture, FurnitureType, Room } from "../types";
+import { bbox, centroid, devicePositions } from "../layout";
 import { DeviceIcon } from "./icons";
 
 type Props = {
@@ -14,18 +15,8 @@ type Props = {
   onSelectDevice: (id: string) => void;
   onSelectFurniture: (id: string) => void;
   onMoveFurniture: (id: string, x: number, y: number) => void;
+  onEnter3D: () => void;
 };
-
-function centroid(poly: number[][]): [number, number] {
-  const n = poly.length || 1;
-  return [poly.reduce((s, p) => s + p[0], 0) / n, poly.reduce((s, p) => s + p[1], 0) / n];
-}
-
-function bbox(poly: number[][]) {
-  const xs = poly.map((p) => p[0]);
-  const ys = poly.map((p) => p[1]);
-  return { x1: Math.min(...xs), x2: Math.max(...xs), y1: Math.min(...ys), y2: Math.max(...ys) };
-}
 
 export function FloorPlan(props: Props) {
   const { rooms, furniture, types, devices, selectedRoom, selectedDevice, selectedFurniture } = props;
@@ -36,30 +27,10 @@ export function FloorPlan(props: Props) {
   const [scale, setScale] = useState(1);
   const typeMap = new Map(types.map((t) => [t.id, t]));
 
-  const positions = useMemo(() => {
-    const map = new Map<string, [number, number]>();
-    const counts = new Map<string, number>();
-    for (const d of devices) {
-      const bound = furniture.find((f) => f.deviceId === d.id);
-      if (bound) {
-        const t = typeMap.get(bound.typeId);
-        map.set(d.id, [bound.x + (t?.w ?? 60) / 2, bound.y + (t?.h ?? 60) / 2]);
-        continue;
-      }
-      const room = rooms.find((r) => r.id === d.roomId);
-      if (!room) continue;
-      const i = counts.get(d.roomId) ?? 0;
-      counts.set(d.roomId, i + 1);
-      const [cx, cy] = centroid(room.polygon);
-      const b = bbox(room.polygon);
-      const col = i % 3;
-      const row = Math.floor(i / 3);
-      const x = Math.min(Math.max(cx - 52 + col * 52, b.x1 + 18), b.x2 - 18);
-      const y = Math.min(Math.max(cy + 34 + row * 44, b.y1 + 24), b.y2 - 14);
-      map.set(d.id, [x, y]);
-    }
-    return map;
-  }, [devices, furniture, rooms, typeMap]);
+  const positions = useMemo(
+    () => devicePositions(rooms, devices, furniture, types),
+    [rooms, devices, furniture, types]
+  );
 
   const onCount = (roomId: string) =>
     devices.filter((d) => d.roomId === roomId && d.state?.power === true).length;
@@ -78,6 +49,13 @@ export function FloorPlan(props: Props) {
       <div className="plan-head">
         <span>平面图 · 点击房间或设备查看</span>
         <div className="plan-tools">
+          <button
+            className={selectedDevice ? "icon-btn text strong" : "icon-btn text"}
+            onClick={props.onEnter3D}
+            title={selectedDevice ? "查看该设备附近的 3D 场景" : "请先选择一个设备"}
+          >
+            3D 视图
+          </button>
           <button className="icon-btn" onClick={() => setScale((s) => Math.max(0.7, +(s - 0.1).toFixed(2)))} aria-label="缩小">−</button>
           <span className="zoom">{Math.round(scale * 100)}%</span>
           <button className="icon-btn" onClick={() => setScale((s) => Math.min(1.8, +(s + 0.1).toFixed(2)))} aria-label="放大">+</button>

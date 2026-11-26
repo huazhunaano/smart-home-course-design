@@ -1,11 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { FloorPlan } from "./components/FloorPlan";
 import { DevicePanel } from "./components/DevicePanel";
 import type { Device, EventItem, Furniture, FurnitureType, Room, Scene } from "./types";
 import { useRealtime } from "./useRealtime";
 
+// 3D 场景体积较大，按需加载，避免拖慢首屏
+const Scene3D = lazy(() => import("./components/Scene3D").then((m) => ({ default: m.Scene3D })));
+
 let seq = 1;
+
+function hasWebGL() {
+  try {
+    const canvas = document.createElement("canvas");
+    return !!(window.WebGLRenderingContext && (canvas.getContext("webgl2") || canvas.getContext("webgl")));
+  } catch {
+    return false;
+  }
+}
 
 type Env = { temperature: number; humidity: number } | null;
 
@@ -34,6 +46,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [logOpen, setLogOpen] = useState(false);
+  const [view3d, setView3d] = useState(false);
 
   const notify = useCallback((text: string, bad = false) => {
     setToast({ text, bad });
@@ -172,6 +185,10 @@ export default function App() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
       if (e.key === "Escape") {
+        if (view3d) {
+          setView3d(false);
+          return;
+        }
         setSelectedFurniture(null);
         setSelectedDevice(null);
       }
@@ -182,7 +199,25 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedFurniture, furniture]);
+  }, [selectedFurniture, furniture, view3d]);
+
+  const onEnter3D = () => {
+    if (!currentDevice) {
+      notify("请先在平面图或设备列表中选择一个设备", true);
+      return;
+    }
+    if (!hasWebGL()) {
+      notify("当前浏览器不支持 WebGL，已保持 2D 平面图", true);
+      return;
+    }
+    setView3d(true);
+  };
+
+  const currentRoom = rooms.find((r) => r.id === currentDevice?.roomId) ?? null;
+
+  useEffect(() => {
+    if (view3d && !currentDevice) setView3d(false);
+  }, [view3d, currentDevice]);
 
   if (loadError) {
     return (
@@ -283,24 +318,38 @@ export default function App() {
             </div>
           </div>
 
-          <FloorPlan
-            rooms={rooms}
-            furniture={furniture}
-            types={types}
-            devices={devices}
-            selectedRoom={selectedRoom}
-            selectedDevice={selectedDevice}
-            selectedFurniture={selectedFurniture}
-            onSelectRoom={(id) => { setSelectedRoom(id); setSelectedDevice(null); setSelectedFurniture(null); }}
-            onSelectDevice={(id) => {
-              setSelectedDevice(id);
-              setSelectedFurniture(null);
-              const d = devices.find((x) => x.id === id);
-              if (d) setSelectedRoom(d.roomId);
-            }}
-            onSelectFurniture={(id) => { setSelectedFurniture(id); setSelectedDevice(null); }}
-            onMoveFurniture={onMoveFurniture}
-          />
+          {view3d && currentDevice && currentRoom ? (
+            <Suspense fallback={<div className="scene3d scene3d-loading">正在载入 3D 场景…</div>}>
+              <Scene3D
+                room={currentRoom}
+                device={currentDevice}
+                devices={roomDevices}
+                furniture={furniture}
+                types={types}
+                onExit={() => setView3d(false)}
+              />
+            </Suspense>
+          ) : (
+            <FloorPlan
+              rooms={rooms}
+              furniture={furniture}
+              types={types}
+              devices={devices}
+              selectedRoom={selectedRoom}
+              selectedDevice={selectedDevice}
+              selectedFurniture={selectedFurniture}
+              onSelectRoom={(id) => { setSelectedRoom(id); setSelectedDevice(null); setSelectedFurniture(null); }}
+              onSelectDevice={(id) => {
+                setSelectedDevice(id);
+                setSelectedFurniture(null);
+                const d = devices.find((x) => x.id === id);
+                if (d) setSelectedRoom(d.roomId);
+              }}
+              onSelectFurniture={(id) => { setSelectedFurniture(id); setSelectedDevice(null); }}
+              onMoveFurniture={onMoveFurniture}
+              onEnter3D={onEnter3D}
+            />
+          )}
         </section>
 
         <aside className="inspector">
