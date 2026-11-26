@@ -68,6 +68,19 @@
 - 设备：统一驱动接口 + 内置模拟器（19 类、40 台），后续可替换为真实驱动
 - 部署：本机双进程启动脚本，不使用 Docker
 
+## 设计参考
+
+前端交互与信息层级参考了以下开源智能家居项目，仅借鉴设计思路，未复制其代码：
+
+| 项目 | 参考内容 |
+|---|---|
+| [Home Assistant](https://www.home-assistant.io/) | 状态跟随视觉（开/关用图标与颜色区分）、单次点击即完成控制、区域化仪表盘布局、平面图叠加设备图层 |
+| [Gladys Assistant](https://gladysassistant.com/) | 可分区 Dashboard、设备磁贴 + 详情弹层、主色克制的浅色界面 |
+| [openHAB Main UI](https://www.openhab.org/docs/ui/) | 位置 / 设备 / 属性三层语义模型，据此组织“房间 → 设备 → 能力”的展示结构 |
+| [ha-floorplan](https://github.com/ExperienceLovelace/ha-floorplan) | SVG 平面图与设备状态联动的实现方式 |
+
+落地到本项目：左侧房间导航（位置）、中间 SVG 平面图与设备圆点（设备）、右侧面板按设备类型生成控制项（属性）；开启设备用实心圆点 + 高亮描边，关闭为空心，悬停显示名称与状态。
+
 ## 关键接口（契约冻结后以 `shared/contracts/` 为准）
 
 - `DeviceDriver.describe()` / `execute(cmd, timeout=1.0)` / `on_state(handler)`

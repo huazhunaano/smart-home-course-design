@@ -26,6 +26,7 @@ secrets/
 *.sqlite3
 *.db-journal
 *.db-wal
+*.db-shm
 
 # 编辑器与系统
 .vscode/

@@ -25,6 +25,10 @@ export const api = {
   furniture: (roomId?: string) =>
     req<Furniture[]>("/api/furniture" + (roomId ? `?room_id=${roomId}` : "")),
   furnitureTypes: () => req<FurnitureType[]>("/api/furniture-types"),
+  env: (roomId?: string) =>
+    req<{ roomId: string; temperature: number; humidity: number; ts: string }>(
+      "/api/env/latest" + (roomId ? `?room_id=${roomId}` : "")
+    ),
   scenes: () => req<Scene[]>("/api/scenes"),
   command: (deviceId: string, capability: string, value: unknown) =>
     req<Result>(`/api/devices/${deviceId}/commands`, {
@@ -39,5 +43,7 @@ export const api = {
     req<Furniture>("/api/furniture", { method: "POST", body: JSON.stringify(body) }),
   moveFurniture: (id: string, x: number, y: number) =>
     req<Furniture>(`/api/furniture/${id}`, { method: "PATCH", body: JSON.stringify({ x, y }) }),
+  rotateFurniture: (id: string, rotation: number) =>
+    req<Furniture>(`/api/furniture/${id}`, { method: "PATCH", body: JSON.stringify({ rotation }) }),
   deleteFurniture: (id: string) => req(`/api/furniture/${id}`, { method: "DELETE" }),
 };

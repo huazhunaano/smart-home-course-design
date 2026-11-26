@@ -5,7 +5,16 @@ import { DevicePanel } from "./components/DevicePanel";
 import type { Device, EventItem, Furniture, FurnitureType, Room, Scene } from "./types";
 import { useRealtime } from "./useRealtime";
 
-let eventSeq = 1;
+let seq = 1;
+
+type Env = { temperature: number; humidity: number } | null;
+
+const SCENE_DESC: Record<string, string> = {
+  home: "开灯 · 空调 · 窗帘",
+  away: "关灯 · 断电 · 清扫",
+  sleep: "关灯 · 窗帘 · 静音",
+  night: "夜灯 · 镜前灯",
+};
 
 export default function App() {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -13,18 +22,23 @@ export default function App() {
   const [furniture, setFurniture] = useState<Furniture[]>([]);
   const [types, setTypes] = useState<FurnitureType[]>([]);
   const [scenes, setScenes] = useState<Scene[]>([]);
+  const [env, setEnv] = useState<Env>(null);
   const [selectedRoom, setSelectedRoom] = useState("R2");
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
+  const [selectedFurniture, setSelectedFurniture] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [progress, setProgress] = useState("");
+  const [toast, setToast] = useState<{ text: string; bad?: boolean } | null>(null);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [logOpen, setLogOpen] = useState(false);
 
-  const pushEvent = useCallback((text: string, bad = false) => {
-    setEvents((prev) =>
-      [{ id: eventSeq++, text, time: new Date().toLocaleTimeString(), bad }, ...prev].slice(0, 8)
-    );
+  const notify = useCallback((text: string, bad = false) => {
+    setToast({ text, bad });
+    window.setTimeout(() => setToast(null), 2600);
+    setEvents((prev) => [{ id: seq++, text, time: new Date().toLocaleTimeString(), bad }, ...prev].slice(0, 50));
   }, []);
 
   useEffect(() => {
@@ -36,28 +50,38 @@ export default function App() {
         setTypes(t);
         setScenes(s);
       })
-      .catch((e) => setLoadError(String(e.message || e)));
+      .catch((e) => setLoadError(String(e.message || e)))
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    api.env(selectedRoom)
+      .then(setEnv)
+      .catch(() => api.env().then(setEnv).catch(() => setEnv(null)));
+  }, [selectedRoom]);
 
   const online = useRealtime((msg) => {
     if (msg.type === "device.state") {
       const { deviceId, state, version } = msg.data;
       setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, state, version } : d)));
-    } else if (msg.type === "command.result") {
-      const r = msg.data;
-      if (!r.ok) pushEvent(`命令失败：${r.error}`, true);
+      if (typeof state?.temperature === "number" && typeof state?.humidity === "number") {
+        const dev = devices.find((d) => d.id === deviceId);
+        if (dev?.roomId === selectedRoom) setEnv({ temperature: state.temperature, humidity: state.humidity });
+      }
+    } else if (msg.type === "command.result" && !msg.data.ok) {
+      notify(`命令失败：${msg.data.error}`, true);
     } else if (msg.type === "scene.progress") {
       const p = msg.data;
-      setProgress(`场景 ${p.sceneId}：${p.done}/${p.total}${p.failed ? `，失败 ${p.failed}` : ""}`);
-      if (p.done === p.total) setTimeout(() => setProgress(""), 2500);
+      setProgress(`场景执行 ${p.done}/${p.total}${p.failed ? `，失败 ${p.failed}` : ""}`);
+      if (p.done === p.total) window.setTimeout(() => setProgress(""), 2600);
     }
   });
 
-  const roomDevices = useMemo(
-    () => devices.filter((d) => d.roomId === selectedRoom),
-    [devices, selectedRoom]
-  );
+  const roomDevices = useMemo(() => devices.filter((d) => d.roomId === selectedRoom), [devices, selectedRoom]);
   const currentDevice = devices.find((d) => d.id === selectedDevice) ?? null;
+  const currentFurniture = furniture.find((f) => f.id === selectedFurniture) ?? null;
+  const roomOn = roomDevices.filter((d) => d.state?.power === true).length;
+  const allOn = devices.filter((d) => d.state?.power === true).length;
 
   const onCommand = async (deviceId: string, capability: string, value: unknown) => {
     setPending(true);
@@ -66,28 +90,26 @@ export default function App() {
     try {
       const res = await api.command(deviceId, capability, value);
       setDevices((prev) =>
-        prev.map((d) =>
-          d.id === deviceId ? { ...d, state: res.state ?? d.state, version: res.version ?? d.version } : d
-        )
+        prev.map((d) => (d.id === deviceId ? { ...d, state: res.state ?? d.state, version: res.version ?? d.version } : d))
       );
-      pushEvent(`${dev?.name ?? deviceId} · ${capability} → ${String(value)}（${res.latencyMs} ms）`);
+      notify(`${dev?.name ?? deviceId} · ${capability} → ${String(value)}（${res.latencyMs} ms）`);
     } catch (e: any) {
       const msg = String(e.message || e);
       setError(msg);
-      pushEvent(`${dev?.name ?? deviceId} 失败：${msg}`, true);
+      notify(`${dev?.name ?? deviceId} 失败：${msg}`, true);
     } finally {
       setPending(false);
     }
   };
 
-  const onTrigger = async (sceneId: string) => {
+  const onTrigger = async (scene: Scene) => {
     setError(null);
-    setProgress(`场景 ${sceneId}：执行中`);
+    setProgress(`场景 ${scene.name}：执行中`);
     try {
-      const res = await api.trigger(sceneId);
-      pushEvent(`场景 ${sceneId} 完成：${res.total - res.failed}/${res.total}`);
+      const res = await api.trigger(scene.id);
+      notify(`场景「${scene.name}」完成：${res.total - res.failed}/${res.total}`);
     } catch (e: any) {
-      setError(String(e.message || e));
+      notify(String(e.message || e), true);
     }
   };
 
@@ -96,7 +118,7 @@ export default function App() {
     try {
       await api.moveFurniture(id, x, y);
     } catch (e: any) {
-      setError(String(e.message || e));
+      notify(String(e.message || e), true);
     }
   };
 
@@ -112,11 +134,55 @@ export default function App() {
         y: 60 + Math.round(Math.random() * 40),
       });
       setFurniture((prev) => [...prev, created]);
-      pushEvent(`已添加家具：${created.name}`);
+      setSelectedFurniture(created.id);
+      setSelectedDevice(null);
+      notify(`已添加「${created.name}」，可在右侧旋转或删除`);
     } catch (e: any) {
-      setError(String(e.message || e));
+      notify(String(e.message || e), true);
     }
   };
+
+  const onRotateFurniture = async (id: string) => {
+    const f = furniture.find((x) => x.id === id);
+    if (!f) return;
+    const rotation = (f.rotation + 90) % 360;
+    setFurniture((prev) => prev.map((x) => (x.id === id ? { ...x, rotation } : x)));
+    try {
+      await api.rotateFurniture(id, rotation);
+    } catch (e: any) {
+      notify(String(e.message || e), true);
+    }
+  };
+
+  const onDeleteFurniture = async (id: string) => {
+    const f = furniture.find((x) => x.id === id);
+    if (!f || !window.confirm(`删除家具「${f.name}」？`)) return;
+    try {
+      await api.deleteFurniture(id);
+      setFurniture((prev) => prev.filter((x) => x.id !== id));
+      setSelectedFurniture(null);
+      notify(`已删除「${f.name}」`);
+    } catch (e: any) {
+      notify(String(e.message || e), true);
+    }
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      if (e.key === "Escape") {
+        setSelectedFurniture(null);
+        setSelectedDevice(null);
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedFurniture) {
+        e.preventDefault();
+        onDeleteFurniture(selectedFurniture);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedFurniture, furniture]);
 
   if (loadError) {
     return (
@@ -128,57 +194,95 @@ export default function App() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="app">
+        <header className="appbar">
+          <div className="brand"><div className="logo">⌂</div><div><h1>智能家居控制台</h1><p>正在载入…</p></div></div>
+        </header>
+        <div className="skeleton-layout">
+          <div className="sk sk-rail" />
+          <div className="sk sk-stage" />
+          <div className="sk sk-inspector" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
-      <header className="topbar">
-        <div>
-          <h1>智能家居 · 平面图控制台</h1>
-          <p className="sub">第 18 组 · 五层架构演示（展示 → 控制 → 设备；状态经 WebSocket 回推）</p>
+      <header className="appbar">
+        <div className="brand">
+          <div className="logo">⌂</div>
+          <div>
+            <h1>智能家居控制台</h1>
+            <p>第 18 组 · 平面图 · 五层架构</p>
+          </div>
         </div>
-        <div className="scene-bar">
-          {scenes.map((s) => (
-            <button key={s.id} className="btn" onClick={() => onTrigger(s.id)}>
-              {s.name}
-            </button>
-          ))}
-          <span className={online ? "status on" : "status"}>{online ? "实时在线" : "连接中…"}</span>
+        <div className="appbar-right">
+          <span className={online ? "pill online" : "pill"}><i className="pulse" />{online ? "实时在线" : "重连中"}</span>
         </div>
       </header>
 
-      {progress && <div className="progress">{progress}</div>}
+      <section className="scene-row">
+        {scenes.map((s) => (
+          <button key={s.id} className="scene-card" onClick={() => onTrigger(s)}>
+            <span className="scene-glyph">{s.name.slice(0, 1)}</span>
+            <span className="scene-text">
+              <b>{s.name}</b>
+              <em>{SCENE_DESC[s.id] ?? "一键执行"}</em>
+            </span>
+          </button>
+        ))}
+        {progress && <span className="progress-pill">{progress}</span>}
+      </section>
 
-      <main className="layout">
-        <aside className="left">
+      <main className="workspace">
+        <aside className="rail">
           <h3>房间</h3>
           <div className="room-list">
             {rooms.map((r) => {
-              const count = devices.filter((d) => d.roomId === r.id).length;
+              const total = devices.filter((d) => d.roomId === r.id).length;
+              const on = devices.filter((d) => d.roomId === r.id && d.state?.power).length;
               return (
                 <button
                   key={r.id}
                   className={r.id === selectedRoom ? "room active" : "room"}
-                  onClick={() => {
-                    setSelectedRoom(r.id);
-                    setSelectedDevice(null);
-                  }}
+                  onClick={() => { setSelectedRoom(r.id); setSelectedDevice(null); setSelectedFurniture(null); }}
                 >
                   <span>{r.name}</span>
-                  <em>{count}</em>
+                  <em>{on}/{total}</em>
                 </button>
               );
             })}
           </div>
-          <h3>家具库</h3>
+          <h3>添加家具</h3>
           <div className="palette">
             {types.map((t) => (
-              <button key={t.id} className="chip" onClick={() => onAddFurniture(t.id)}>
-                {t.name}
-              </button>
+              <button key={t.id} className="chip" onClick={() => onAddFurniture(t.id)}>{t.name}</button>
             ))}
           </div>
         </aside>
 
-        <section className="canvas">
+        <section className="stage">
+          <div className="metrics">
+            <div className="metric">
+              <span>室内环境</span>
+              <b>{env ? `${env.temperature.toFixed(1)}℃` : "--"}</b>
+              <em>{env ? `湿度 ${env.humidity.toFixed(0)}%` : "暂无采样"}</em>
+            </div>
+            <div className="metric">
+              <span>本房间开启</span>
+              <b>{roomOn}<small> / {roomDevices.length}</small></b>
+              <em>{rooms.find((r) => r.id === selectedRoom)?.name}</em>
+            </div>
+            <div className="metric">
+              <span>全屋开启</span>
+              <b>{allOn}<small> / {devices.length}</small></b>
+              <em>{progress || "WebSocket 实时同步"}</em>
+            </div>
+          </div>
+
           <FloorPlan
             rooms={rooms}
             furniture={furniture}
@@ -186,44 +290,58 @@ export default function App() {
             devices={devices}
             selectedRoom={selectedRoom}
             selectedDevice={selectedDevice}
-            onSelectRoom={(id) => {
-              setSelectedRoom(id);
-              setSelectedDevice(null);
-            }}
+            selectedFurniture={selectedFurniture}
+            onSelectRoom={(id) => { setSelectedRoom(id); setSelectedDevice(null); setSelectedFurniture(null); }}
             onSelectDevice={(id) => {
               setSelectedDevice(id);
+              setSelectedFurniture(null);
               const d = devices.find((x) => x.id === id);
               if (d) setSelectedRoom(d.roomId);
             }}
+            onSelectFurniture={(id) => { setSelectedFurniture(id); setSelectedDevice(null); }}
             onMoveFurniture={onMoveFurniture}
           />
-          <p className="hint">拖动家具即可移动并保存；点击房间或设备查看详情。设备圆点黑色表示开启。</p>
         </section>
 
-        <aside className="right">
+        <aside className="inspector">
           <DevicePanel
             device={currentDevice}
             roomDevices={roomDevices}
+            furniture={currentFurniture}
             onSelect={(id) => {
+              if (!id) { setSelectedDevice(null); return; }
               setSelectedDevice(id);
+              setSelectedFurniture(null);
               const d = devices.find((x) => x.id === id);
               if (d) setSelectedRoom(d.roomId);
             }}
             onCommand={onCommand}
+            onRotateFurniture={onRotateFurniture}
+            onDeleteFurniture={onDeleteFurniture}
             pending={pending}
             error={error}
           />
         </aside>
       </main>
 
-      <footer className="events">
-        {events.length === 0 ? <span className="hint">暂无事件</span> : events.map((e) => (
-          <div key={e.id} className={e.bad ? "event bad" : "event"}>
-            <span>{e.time}</span>
-            <b>{e.text}</b>
+      <footer className={logOpen ? "logbar open" : "logbar"}>
+        <button className="log-toggle" onClick={() => setLogOpen((v) => !v)}>
+          <b>事件记录</b>
+          <span>{events[0] ? `${events[0].time} · ${events[0].text}` : "暂无事件"}</span>
+          <em>{logOpen ? "收起" : "展开"}</em>
+        </button>
+        {logOpen && (
+          <div className="log-list">
+            {events.length === 0 ? <p className="hint">暂无事件</p> : events.map((e) => (
+              <div key={e.id} className={e.bad ? "log-row bad" : "log-row"}>
+                <span>{e.time}</span><b>{e.text}</b>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </footer>
+
+      {toast && <div className={toast.bad ? "toast bad" : "toast"}>{toast.text}</div>}
     </div>
   );
 }
